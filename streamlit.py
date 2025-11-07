@@ -7,7 +7,54 @@ from sklearn.ensemble import RandomForestRegressor
 from PIL import Image
 import matplotlib.pyplot as plt
 import seaborn as sns
+import requests
+import tempfile
+import os
 
+# Fonction pour charger le modèle depuis Google Drive
+@st.cache_resource
+def load_model():
+    try:
+        # ID de votre fichier sur Google Drive (à remplacer par votre propre ID)
+        file_id = "1votre_file_id_ici"  # ⚠️ REMPLACEZ PAR VOTRE ID RÉEL
+        
+        # URL de téléchargement direct
+        url = f"https://drive.google.com/uc?export=download&id={file_id}"
+        
+        st.info("📥 Téléchargement du modèle depuis Google Drive...")
+        
+        # Télécharger le fichier
+        response = requests.get(url)
+        response.raise_for_status()  # Vérifier que le téléchargement a réussi
+        
+        # Sauvegarder temporairement le fichier
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pkl') as tmp_file:
+            tmp_file.write(response.content)
+            tmp_path = tmp_file.name
+        
+        # Essayer d'abord joblib, puis pickle
+        try:
+            model = joblib.load(tmp_path)
+            st.success("✅ Modèle chargé avec joblib")
+        except:
+            with open(tmp_path, 'rb') as f:
+                model = pickle.load(f)
+            st.success("✅ Modèle chargé avec pickle")
+        
+        # Nettoyer le fichier temporaire
+        os.unlink(tmp_path)
+        return model
+        
+    except Exception as e:
+        st.error(f"❌ Erreur lors du chargement du modèle: {e}")
+        st.info("""
+        **Instructions pour configurer Google Drive:**
+        1. Uploader votre fichier `random_forest_model.pkl` sur Google Drive
+        2. Partager le fichier : « Partager » → « Anyone with the link »
+        3. Récupérer l'ID dans l'URL : `https://drive.google.com/file/d/[FILE_ID]/view`
+        4. Remplacer `file_id` dans le code par votre ID réel
+        """)
+        return None
 
 # Couleurs des pages
 def set_background(page):
@@ -69,7 +116,6 @@ def set_background(page):
             background-color: transparent !important;
         }}
 
-
         </style>
     """, unsafe_allow_html=True)
 
@@ -99,6 +145,7 @@ st.title("APPLICATION DU MACHINE LEARNING POUR L'ESTIMATION DE LA RESISTANCE DU 
 st.markdown("""
 LE BUT PRINCIPAL EST DE PREDIRE LA RESISTANCE DU BETON.
 """)
+
 # Sidebar avec logo
 with st.sidebar:
     # Ajout du logo
@@ -114,23 +161,7 @@ with st.sidebar:
 st.sidebar.title("Navigation")
 page = st.sidebar.radio("Aller à", ["Accueil", "Prédiction", "Visualisations", "À propos"])
 
-
 set_background(page)
-
-
-# Fonction pour charger le modèle
-def load_model():
-    try:
-        # Essayer joblib d'abord, puis pickle
-        try:
-            model = joblib.load('random_forest_model.joblib')
-        except:
-            model = pickle.load(open('random_forest_model.pkl', 'rb'))
-        return model
-    except Exception as e:
-    
-        st.error(f"Erreur lors du chargement du modèle: {e}")
-        return None
 
 # Page d'accueil
 if page == "Accueil":
@@ -173,8 +204,18 @@ if page == "Accueil":
     # Afficher les informations du modèle chargé
     model = load_model()
     if model is not None:
-        st.success("✅ Modèle chargé avec succès!")
+        st.success("✅ Modèle chargé avec succès depuis Google Drive!")
         st.info(f"Nombre d'arbres dans la forêt: {model.n_estimators}")
+        
+        # Instructions pour l'utilisateur
+        with st.expander("🔧 Configuration Google Drive"):
+            st.markdown("""
+            **Pour mettre à jour le modèle:**
+            1. Uploader le nouveau modèle sur Google Drive
+            2. Partager avec le lien public
+            3. Remplacer l'ID dans la variable `file_id`
+            4. Redémarrer l'application
+            """)
 
 # Page de prédiction
 elif page == "Prédiction":
@@ -268,16 +309,21 @@ elif page == "Visualisations":
         st.subheader("Importance des Features")
         
         if hasattr(model, 'feature_importances_'):
+            # Noms des features pour une meilleure lisibilité
+            feature_names = ['cement', 'slag', 'ash', 'water', 'superplastic', 'coarseagg', 'fineagg', 'age']
+            
             # Créer un DataFrame pour l'importance des features
             feature_importance = pd.DataFrame({
-                'feature': [f'Feature {i}' for i in range(len(model.feature_importances_))],
+                'feature': feature_names,
                 'importance': model.feature_importances_
             }).sort_values('importance', ascending=False)
             
             # Graphique d'importance des features
             fig, ax = plt.subplots(figsize=(10, 6))
-            sns.barplot(data=feature_importance.head(8), x='importance', y='feature', ax=ax)
-            ax.set_title('- Importance des Features')
+            sns.barplot(data=feature_importance, x='importance', y='feature', ax=ax)
+            ax.set_title('Importance des Features pour la Résistance du Béton')
+            ax.set_xlabel('Importance')
+            ax.set_ylabel('Composants du Béton')
             st.pyplot(fig)
             
             # Afficher le tableau
@@ -310,6 +356,13 @@ elif page == "À propos":
     - 📈 Visualisation de l'importance des features
     - 📁 Support des fichiers CSV
     - 🎯 Interface utilisateur intuitive
+    - ☁️ Modèle stocké sur Google Drive
+    
+    **Architecture:**
+    - Modèle Random Forest entraîné
+    - Stockage cloud via Google Drive
+    - Interface Streamlit
+    - Déploiement Streamlit Cloud
     """)
 
 # Footer
@@ -317,5 +370,5 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("---")
 st.sidebar.markdown("---")
 st.sidebar.markdown("Téléphone: 659 060 681")
-st.sidebar.markdown("Email: louiskngn01@gmail.com")
+st.sidebar.markdown(" Email: louiskngn@gmail.com")
 st.sidebar.markdown("---")
